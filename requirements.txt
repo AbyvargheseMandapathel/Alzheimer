@@ -1,0 +1,10 @@
+pandas
+numpy
+scikit-learn
+matplotlib
+shap
+imbalanced-learn
+fastapi
+uvicorn
+python-multipart
+jinja2
