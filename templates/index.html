@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alzheimer's Disease Prediction</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --bg-color: #f3f4f6;
+            --card-bg: #ffffff;
+            --text-color: #1f2937;
+            --text-muted: #6b7280;
+            --border-color: #e5e7eb;
+            --success: #10b981;
+            --danger: #ef4444;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(to right, var(--primary), #9333ea);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+
+        .form-section {
+            margin-bottom: 30px;
+        }
+
+        .form-section h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-color);
+            margin-bottom: 15px;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 5px;
+            color: var(--text-color);
+        }
+
+        .form-group input {
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 0.95rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+
+        .submit-btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        .submit-btn:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .submit-btn:active {
+            transform: translateY(1px);
+        }
+
+        .result-section {
+            display: none;
+            text-align: center;
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 12px;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .result-positive {
+            background-color: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+
+        .result-negative {
+            background-color: #d1fae5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+        }
+
+        .result-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .result-prob {
+            font-size: 1.1rem;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: var(--primary);
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 50px;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <div class="header">
+            <h1>Alzheimer's Prediction AI</h1>
+            <p>Advanced Multimodal AI for Early Detection</p>
+        </div>
+
+        <div class="card">
+            <form id="predictionForm">
+                <!-- 1. Cognitive Assessments -->
+                <div class="form-section">
+                    <h3>🧠 Cognitive Assessments</h3>
+                    <div class="grid">
+                        <div class="form-group"><label>LOGIMEM</label><input type="number" name="LOGIMEM" step="any"
+                                required></div>
+                        <div class="form-group"><label>DIGIF</label><input type="number" name="DIGIF" step="any"
+                                required></div>
+                        <div class="form-group"><label>DIGIFLEN</label><input type="number" name="DIGIFLEN" step="any"
+                                required></div>
+                        <div class="form-group"><label>DIGIB</label><input type="number" name="DIGIB" step="any"
+                                required></div>
+                        <div class="form-group"><label>DIGIBLEN</label><input type="number" name="DIGIBLEN" step="any"
+                                required></div>
+                        <div class="form-group"><label>ANIMALS</label><input type="number" name="ANIMALS" step="any"
+                                required></div>
+                        <div class="form-group"><label>VEG</label><input type="number" name="VEG" step="any" required>
+                        </div>
+                        <div class="form-group"><label>TRAILA</label><input type="number" name="TRAILA" step="any"
+                                required></div>
+                        <div class="form-group"><label>TRAILARR</label><input type="number" name="TRAILARR" step="any"
+                                required></div>
+                        <div class="form-group"><label>TRAILALI</label><input type="number" name="TRAILALI" step="any"
+                                required></div>
+                        <div class="form-group"><label>TRAILB</label><input type="number" name="TRAILB" step="any"
+                                required></div>
+                        <div class="form-group"><label>TRAILBRR</label><input type="number" name="TRAILBRR" step="any"
+                                required></div>
+                        <div class="form-group"><label>TRAILBLI</label><input type="number" name="TRAILBLI" step="any"
+                                required></div>
+                        <div class="form-group"><label>WAIS</label><input type="number" name="WAIS" step="any" required>
+                        </div>
+                        <div class="form-group"><label>MEMUNITS</label><input type="number" name="MEMUNITS" step="any"
+                                required></div>
+                        <div class="form-group"><label>MEMTIME</label><input type="number" name="MEMTIME" step="any"
+                                required></div>
+                        <div class="form-group"><label>BOSTON</label><input type="number" name="BOSTON" step="any"
+                                required></div>
+                        <div class="form-group"><label>MMSE (Mini-Mental State Exam)</label><input type="number"
+                                name="mmse" step="any" required></div>
+                    </div>
+                </div>
+
+                <!-- 2. MRI / Brain Volumes -->
+                <div class="form-section">
+                    <h3>🏥 Brain Volumes (MRI)</h3>
+                    <div class="grid">
+                        <div class="form-group"><label>IntraCranialVol</label><input type="number"
+                                name="IntraCranialVol" step="any" required></div>
+                        <div class="form-group"><label>lhCortexVol</label><input type="number" name="lhCortexVol"
+                                step="any" required></div>
+                        <div class="form-group"><label>SubCortGrayVol</label><input type="number" name="SubCortGrayVol"
+                                step="any" required></div>
+                        <div class="form-group"><label>SupraTentorialVol</label><input type="number"
+                                name="SupraTentorialVol" step="any" required></div>
+                        <div class="form-group"><label>lhCorticalWhiteMatterVol</label><input type="number"
+                                name="lhCorticalWhiteMatterVol" step="any" required></div>
+                    </div>
+                </div>
+
+                <!-- 3. Demographics & Clinical -->
+                <div class="form-section">
+                    <h3>👤 Demographics & Clinical</h3>
+                    <div class="grid">
+                        <div class="form-group"><label>Age at Entry</label><input type="number" name="ageAtEntry"
+                                step="any" required></div>
+                        <div class="form-group"><label>APOE Genotype</label><input type="number" name="apoe" step="any"
+                                required></div>
+                        <div class="form-group"><label>Height (cm)</label><input type="number" name="height" step="any"
+                                required></div>
+                        <div class="form-group"><label>Weight (kg)</label><input type="number" name="weight" step="any"
+                                required></div>
+                    </div>
+                </div>
+
+                <!-- 4. Functional & Behavioral -->
+                <div class="form-section">
+                    <h3>📝 Functional & Behavioral (CDR/ADL)</h3>
+                    <div class="grid">
+                        <div class="form-group"><label>Community Affairs (commun)</label><input type="number"
+                                name="commun" step="any" required></div>
+                        <div class="form-group"><label>Home & Hobbies (homehobb)</label><input type="number"
+                                name="homehobb" step="any" required></div>
+                        <div class="form-group"><label>Judgment</label><input type="number" name="judgment" step="any"
+                                required></div>
+                        <div class="form-group"><label>Memory (Clinical)</label><input type="number" name="memory"
+                                step="any" required></div>
+                        <div class="form-group"><label>Orientation</label><input type="number" name="orient" step="any"
+                                required></div>
+                        <div class="form-group"><label>Personal Care (perscare)</label><input type="number"
+                                name="perscare" step="any" required></div>
+                        <div class="form-group"><label>CDR Sum of Boxes (sumbox)</label><input type="number"
+                                name="sumbox" step="any" required></div>
+                    </div>
+                </div>
+
+        </div>
+    </div>
+
+    <div style="display: flex; gap: 10px;">
+        <button type="button" class="submit-btn" id="demoBtn" style="background-color: #6b7280;">Fill Demo Data</button>
+        <button type="submit" class="submit-btn" id="analyzeBtn">Analyze Patient Data</button>
+    </div>
+    </form>
+
+    <div class="loading" id="loadingSpinner">
+        <div class="spinner"></div>
+        <p>Processing data...</p>
+    </div>
+
+    <div class="result-section" id="resultCard">
+        <h2 class="result-title" id="resultClass"></h2>
+        <p class="result-prob" id="resultProb"></p>
+
+        <div id="shapSection" style="margin-top: 20px; overflow-x: auto;">
+            <h3 style="margin-bottom: 10px;">Explanability (SHAP Values)</h3>
+            <img id="shapImage" src="" alt="SHAP Explanation"
+                style="max-width: 100%; border-radius: 8px; border: 1px solid #e5e7eb;">
+
+            <div id="explanationList"
+                style="margin-top: 15px; text-align: left; background: #f9fafb; padding: 15px; border-radius: 8px;">
+                <h4>Top Contributing Factors:</h4>
+                <ul id="shapList" style="padding-left: 20px;"></ul>
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <div class="footer">
+        <p>AI Model Powered by Random Forest & Federated Learning Techniques</p>
+    </div>
+    </div>
+
+    <script>
+        document.getElementById('predictionForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            const form = e.target;
+            const btn = document.getElementById('analyzeBtn');
+            const spinner = document.getElementById('loadingSpinner');
+            const resultCard = document.getElementById('resultCard');
+
+            // UI Loading State
+            btn.disabled = true;
+            btn.style.opacity = '0.7';
+            spinner.style.display = 'block';
+            resultCard.style.display = 'none';
+
+            // Collect Data
+            const formData = new FormData(form);
+            const data = {};
+            formData.forEach((value, key) => {
+                data[key] = parseFloat(value);
+            });
+
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                // Display Result
+                spinner.style.display = 'none';
+                resultCard.style.display = 'block';
+
+                const resultClass = document.getElementById('resultClass');
+                const resultProb = document.getElementById('resultProb');
+                const shapImage = document.getElementById('shapImage');
+                const shapList = document.getElementById('shapList');
+
+                resultClass.innerText = result.class_label;
+
+                // Probability logic
+                const predictedClassIndex = result.prediction;
+                const prob = result.probability[predictedClassIndex];
+                const probPercent = (prob * 100).toFixed(2);
+
+                resultProb.innerHTML = `Probability of <strong>${result.class_label}</strong>: ${probPercent}%`;
+
+                if (predictedClassIndex === 0) {
+                    resultCard.className = 'result-section result-negative';
+                } else if (predictedClassIndex === 1) {
+                    resultCard.className = 'result-section';
+                    resultCard.style.backgroundColor = '#fffbeb';
+                    resultCard.style.color = '#92400e';
+                    resultCard.style.borderColor = '#fcd34d';
+                } else {
+                    resultCard.className = 'result-section result-positive';
+                }
+
+                // SHAP Image
+                if (result.shap_plot) {
+                    shapImage.src = 'data:image/png;base64,' + result.shap_plot;
+                    document.getElementById('shapSection').style.display = 'block';
+                } else {
+                    document.getElementById('shapSection').style.display = 'none';
+                }
+
+                // Explanations
+                shapList.innerHTML = '';
+                if (result.explanations && result.explanations.length > 0) {
+                    result.explanations.forEach(text => {
+                        const li = document.createElement('li');
+                        li.innerText = text;
+                        shapList.appendChild(li);
+                    });
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                spinner.style.display = 'none';
+                alert('An error occurred during prediction. Please check the console.');
+            } finally {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+            }
+        });
+
+        // Demo Data Logic
+        document.getElementById('demoBtn').addEventListener('click', function () {
+            const demoData = {
+                'LOGIMEM': 9.0, 'DIGIF': 8.0, 'DIGIFLEN': 7.0, 'DIGIB': 5.0, 'DIGIBLEN': 4.0,
+                'ANIMALS': 23.0, 'VEG': 15.0, 'TRAILA': 31.0, 'TRAILARR': 0.0, 'TRAILALI': 24.0,
+                'TRAILB': 73.0, 'TRAILBRR': 0.0, 'TRAILBLI': 24.0, 'WAIS': 59.0, 'MEMUNITS': 13.0,
+                'MEMTIME': 13.0, 'BOSTON': 26.0, 'mmse': 29.0,
+                'IntraCranialVol': 1422231.26, 'lhCortexVol': 197818.15, 'SubCortGrayVol': 45735.5,
+                'SupraTentorialVol': 827054.99, 'lhCorticalWhiteMatterVol': 175469.99,
+                'ageAtEntry': 74.38, 'apoe': 23.0, 'height': 63.0, 'weight': 190.0,
+                'commun': 0.0, 'homehobb': 0.0, 'judgment': 0.0, 'memory': 0.5, 'orient': 0.5,
+                'perscare': 0.0, 'sumbox': 1.0
+            };
+
+            const form = document.getElementById('predictionForm');
+            Object.keys(demoData).forEach(key => {
+                const input = form.querySelector(`[name="${key}"]`);
+                if (input) input.value = demoData[key];
+            });
+        });
+    </script>
+
+</body>
+
+</html>

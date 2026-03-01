@@ -1,0 +1,20 @@
+# MRI dataset
+mri/
+mri.zip
+
+# Model weights
+weights/
+
+# Optional: large files
+*.h5
+*.pt
+*.pth
+*.ckpt
+
+# Environment & Cache
+venv/
+__pycache__/
+*.crdownload
+.DS_Store
+.idea/
+.vscode/
