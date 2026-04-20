@@ -24,6 +24,11 @@ def simulate_federated_learning(data_dir, num_rounds=10, num_clients=3, local_ep
     os.makedirs("weights", exist_ok=True)
     best_acc = 0.0
     
+    # Optimizer and Scheduler for the global model conceptually 
+    # (actually used for local updates, but we track global stats)
+    optimizer = torch.optim.Adam(global_model.parameters(), lr=1e-4)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
+    
     # 3. Federated Rounds
     for r in range(num_rounds):
         print(f"\n--- Round {r+1}/{num_rounds} ---")
@@ -67,15 +72,19 @@ def simulate_federated_learning(data_dir, num_rounds=10, num_clients=3, local_ep
                 val_correct += (predicted == labels).sum().item()
                 
         val_acc = 100 * val_correct / val_total
-        print(f"Round {r+1} Global Val Loss: {val_loss/len(val_loader):.4f}, Global Val Acc: {val_acc:.2f}%")
+        print(f"Round {r+1} Global Val Loss: {val_loss/len(val_loader):.4f}, Global Val Acc: {val_acc:.2f}% (LR: {scheduler.get_last_lr()[0]:.6f})")
+        
+        # Step the scheduler
+        scheduler.step()
         
         if val_acc > best_acc:
             best_acc = val_acc
             torch.save(global_model.state_dict(), "weights/best_federated_model.pth")
-            print("=> Saved optimal federated model")
+            print(f"=> Saved new optimal federated model with accuracy: {best_acc:.2f}%")
 
     print(f"\nFederated Training Complete. Best Val Accuracy: {best_acc:.2f}%")
 
 if __name__ == "__main__":
     dataset_path = "mri/Data"
-    simulate_federated_learning(dataset_path, num_rounds=5, num_clients=3, local_epochs=2)
+    # Target 50 rounds for high accuracy convergence
+    simulate_federated_learning(dataset_path, num_rounds=50, num_clients=3, local_epochs=2)
