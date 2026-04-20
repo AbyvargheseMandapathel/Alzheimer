@@ -42,14 +42,20 @@ class GradCAM:
             cam += w * activations[i]
             
         cam = np.maximum(cam, 0)
-        # Handle zero cases safely
-        if np.max(cam) != 0:
-            cam = cam / np.max(cam)
+        
+        # Robust normalization
+        cam_max = np.max(cam)
+        if cam_max > 0:
+            cam = cam / cam_max
+        else:
+            # Fallback if no positive influence is found (prevent "null" image)
+            cam = np.zeros_like(cam)
             
         # Resize to original image size (W, H)
         cam = cv2.resize(cam, (x.shape[3], x.shape[2]))
         
         return cam, class_idx
+
 
 def overlay_gradcam(original_img_np, cam, alpha=0.5, colormap=cv2.COLORMAP_JET):
     """

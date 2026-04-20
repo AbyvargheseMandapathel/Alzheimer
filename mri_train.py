@@ -94,7 +94,8 @@ def train_mri_model(data_dir, num_epochs=20, batch_size=32, lr=1e-4):
             'recall': recall,
             'f1': f1
         })
-        pd.DataFrame(metrics_history).to_csv("results/training_metrics.csv", index=False)
+        pd.DataFrame(metrics_history).to_csv("results/mri_metrics.csv", index=False)
+
         
         # 7. Save Best Model
         if val_acc > best_acc:

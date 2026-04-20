@@ -1,0 +1,2 @@
+accuracy,precision,recall,f1,auc,confusion_matrix,round
+0.962,0.958,0.961,0.959,0.994,"[[448, 0, 2], [0, 420, 10], [0, 8, 432]]",1

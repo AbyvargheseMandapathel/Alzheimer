@@ -64,28 +64,35 @@ def load_tabular_model():
 
 @st.cache_data
 def load_performance_metrics():
-    metrics_path = "results/training_metrics.csv"
-    if os.path.exists(metrics_path):
-        df = pd.read_csv(metrics_path)
+    # EXCLUSIVELY use MRI metrics for the updated app
+    mri_metrics_path = "results/mri_metrics.csv"
+    
+    if os.path.exists(mri_metrics_path):
+        df = pd.read_csv(mri_metrics_path)
         df['accuracy_pct'] = df['accuracy'] * 100
         return df
     return None
 
+
+
 st.title("🧠 Alzheimer's Diagnostic Center (Legacy ResNet18)")
 st.markdown("### Using stable ResNet18 architecture for existing weight compatibility")
+
+# Global Data Loading
+metrics_df = load_performance_metrics()
 
 # Sidebar selection
 st.sidebar.title("Configuration")
 model_selection = "Centralized"
 model, device = load_model(model_selection)
 
-
-# Display Global Performance Metrics in Sidebar
+# Display MRI Model Performance in Sidebar
 st.sidebar.divider()
-st.sidebar.subheader("📈 Global Model Performance")
-metrics_df = load_performance_metrics()
+st.sidebar.subheader("📈 MRI Model Reliability")
+
 
 if metrics_df is not None:
+
     latest = metrics_df.iloc[-1]
     best_acc = metrics_df['accuracy_pct'].max()
     
@@ -99,20 +106,14 @@ if metrics_df is not None:
 else:
     st.sidebar.info("Performance stats not yet available.")
 
-tab_mri, tab_multimodal, tab_stats = st.tabs(["🖼️ MRI Scan Analysis", "📋 Multimodal Counterfactuals", "📊 Model Performance"])
+# --- MRI Scan Analysis ---
+uploaded_file = st.file_uploader("Upload MRI Image", type=["png", "jpg", "jpeg"])
 
-with tab_mri:
-    uploaded_file = st.file_uploader("Upload MRI Image", type=["png", "jpg", "jpeg"])
 
 if uploaded_file is not None:
+    # 1. Preprocessing & Prediction (Run this first)
     image = Image.open(uploaded_file).convert('RGB')
     
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.subheader("Original Scan")
-        st.image(image, use_container_width=True)
-        
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
@@ -126,21 +127,47 @@ if uploaded_file is not None:
         probabilities = torch.nn.functional.softmax(outputs[0], dim=0)
         class_idx = torch.argmax(probabilities).item()
         confidence = probabilities[class_idx].item() * 100
-        
+
+    # --- 2. Diagnosis Header (Top of Page) ---
     st.markdown("---")
     st.markdown(f"### 🩺 **Diagnosis Prediction:** {CLASS_NAMES[class_idx]} ({confidence:.2f}% confidence)")
     
+    # 3. MRI Model Reliability (Metrics)
+    if metrics_df is not None:
+        latest = metrics_df.iloc[-1]
+        mcol1, mcol2, mcol3, mcol4 = st.columns(4)
+        with mcol1:
+            st.metric("MRI Model Accuracy", f"{latest['accuracy']*100:.1f}%")
+        with mcol2:
+            st.metric("Precision", f"{latest['precision']:.2f}")
+        with mcol3:
+            st.metric("Recall", f"{latest['recall']:.2f}")
+        with mcol4:
+            st.metric("F1 Score", f"{latest['f1']:.2f}")
+    else:
+        st.info("📊 **Note:** MRI-specific training metrics are not yet generated. Please run `mri_train.py` to see updated model reliability.")
+
+    # 4. Confidence Bars
     for i, class_name in CLASS_NAMES.items():
         st.progress(probabilities[i].item(), text=f"{class_name}: {probabilities[i].item()*100:.2f}%")
         
     st.markdown("---")
+
+    # --- 5. Visualization Columns ---
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.subheader("Original Scan")
+        st.image(image, use_container_width=True)
     
     with st.spinner("Generating XAI Explanations..."):
+        # 1. Grad CAM
         target_layer = model.get_last_conv_layer()
         cam_generator = GradCAM(model, target_layer)
-        img_t.requires_grad = True
+        img_t.requires_grad = True # Required for hooks to trigger
         cam, _ = cam_generator(img_t, class_idx)
         
+        # Prepare for overlay
         img_np = np.array(image.resize((224, 224))) / 255.0
         overlay = overlay_gradcam(img_np, cam)
         
@@ -148,6 +175,7 @@ if uploaded_file is not None:
             st.subheader("Grad-CAM Heatmap")
             st.image(overlay, use_container_width=True)
             
+        # 2. SHAP
         background = torch.zeros((5, 3, 224, 224)).to(device)
         try:
             shap_path = "results/shap_output_legacy.png"
@@ -172,29 +200,6 @@ if uploaded_file is not None:
         with c_col2:
             st.info("Visualizing the minimal changes needed in the MRI scan to shift the diagnosis to a healthier state.")
 
-with tab_multimodal:
-    st.subheader("Clinical Biomarker Counterfactuals")
-    rf_model, df, cf_explainer = load_tabular_model()
-    
-    if rf_model is None:
-        st.warning("Run training to enable clinical counterfactuals.")
-    else:
-        sample_idx = st.slider("Select Patient Record", 0, len(df)-1, 0)
-        query_data = df.iloc[[sample_idx]].drop(columns=['Target'])
-        st.dataframe(query_data)
-        
-        current_pred = rf_model.predict(query_data)[0]
-        st.metric("Model Prediction", CLASS_NAMES.get(current_pred, f"Class {current_pred}"))
 
-        if st.button("Generate Actionable Counterfactuals"):
-            with st.spinner("Processing..."):
-                cf_result = cf_explainer.generate_counterfactuals(query_data, total_CFs=2, desired_class=0)
-                cf_df = cf_explainer.get_cf_dataframe(cf_result)
-                st.dataframe(cf_df)
+# End of MRI Analysis
 
-with tab_stats:
-    st.subheader("Model Validation Performance")
-    if metrics_df is not None:
-        st.line_chart(metrics_df[['accuracy_pct']])
-    else:
-        st.warning("No metrics found.")

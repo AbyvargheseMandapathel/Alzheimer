@@ -66,13 +66,22 @@ def load_tabular_model():
 
 @st.cache_data
 def load_performance_metrics():
-    metrics_path = "results/training_metrics.csv"
-    if os.path.exists(metrics_path):
-        df = pd.read_csv(metrics_path)
+    # Prioritize the updated MRI metrics
+    mri_metrics_path = "results/mri_metrics.csv"
+    legacy_metrics_path = "results/training_metrics.csv"
+    
+    path = mri_metrics_path if os.path.exists(mri_metrics_path) else legacy_metrics_path
+    
+    if os.path.exists(path):
+        df = pd.read_csv(path)
         # Convert to percentage for display where appropriate
         df['accuracy_pct'] = df['accuracy'] * 100
         return df
     return None
+
+
+# Global Data Loading
+metrics_df = load_performance_metrics()
 
 st.title("🧠 Alzheimer's Disease Diagnostic Center")
 st.markdown("### Advanced Explainable AI for Early Detection")
@@ -84,10 +93,10 @@ model, device = load_model(model_selection)
 
 
 
-# Display Global Performance Metrics in Sidebar
+# Display MRI Model Performance in Sidebar
 st.sidebar.divider()
-st.sidebar.subheader("📈 Global Model Performance")
-metrics_df = load_performance_metrics()
+st.sidebar.subheader("📈 MRI Model Reliability")
+
 
 if metrics_df is not None:
     # Get the latest stats from the last round
@@ -104,10 +113,9 @@ if metrics_df is not None:
 else:
     st.sidebar.info("Performance stats not yet available.")
 
-tab_mri, tab_multimodal, tab_stats = st.tabs(["🖼️ MRI Scan Analysis", "📋 Multimodal Counterfactuals", "📊 Model Performance"])
+# --- MRI Scan Analysis ---
+uploaded_file = st.file_uploader("Upload MRI Image", type=["png", "jpg", "jpeg"])
 
-with tab_mri:
-    uploaded_file = st.file_uploader("Upload MRI Image", type=["png", "jpg", "jpeg"])
 
 if uploaded_file is not None:
     # Read the file
@@ -139,12 +147,22 @@ if uploaded_file is not None:
     st.markdown("---")
     st.markdown(f"### 🩺 **Diagnosis Prediction:** {CLASS_NAMES[class_idx]} ({confidence:.2f}% confidence)")
     
-    # Show Global Metrics for context
+    # Show Global Metrics for context (Prominent display for each input)
     if metrics_df is not None:
         latest = metrics_df.iloc[-1]
-        st.caption(f"📊 **Model Reliability (Global):** Accuracy: {latest['accuracy']*100:.1f}% | Precision: {latest['precision']:.2f} | Recall: {latest['recall']:.2f}")
+        mcol1, mcol2, mcol3, mcol4 = st.columns(4)
+        with mcol1:
+            st.metric("MRI Model Accuracy", f"{latest['accuracy']*100:.1f}%")
 
-    # Progress bars for probabilities
+        with mcol2:
+            st.metric("Precision", f"{latest['precision']:.2f}")
+        with mcol3:
+            st.metric("Recall", f"{latest['recall']:.2f}")
+        with mcol4:
+            st.metric("F1 Score", f"{latest['f1']:.2f}")
+    
+    st.markdown("---")
+
     for i, class_name in CLASS_NAMES.items():
         st.progress(probabilities[i].item(), text=f"{class_name}: {probabilities[i].item()*100:.2f}%")
         
@@ -224,63 +242,5 @@ if uploaded_file is not None:
             )
     else:
         st.warning("Install `fpdf` (`pip install fpdf`) to enable PDF report generation.")
-with tab_multimodal:
-    st.subheader("Clinical Biomarker Counterfactuals")
-    rf_model, df, cf_explainer = load_tabular_model()
-    
-    if rf_model is None:
-        st.warning("Tabular model or dataset not found in `results/` or `Multimodal main model and dataset/`. Please run `main.py` first to train the model.")
-    else:
-        st.write("Analyze how changing clinical features impact the Alzheimer's risk profile.")
-        
-        # Let user select a sample patient or enter data
-        sample_idx = st.slider("Select Sample Patient Record from Dataset", 0, len(df)-1, 0)
-        query_data = df.iloc[[sample_idx]].drop(columns=['Target'])
-        
-        st.dataframe(query_data)
-        
-        current_pred = rf_model.predict(query_data)[0]
-        st.metric("Current Model Prediction", CLASS_NAMES.get(current_pred, f"Class {current_pred}"))
-        
-        # Show Global Metrics for context
-        if metrics_df is not None:
-            latest = metrics_df.iloc[-1]
-            st.caption(f"📊 **Model Reliability (Global):** Accuracy: {latest['accuracy']*100:.1f}% | Precision: {latest['precision']:.2f} | Recall: {latest['recall']:.2f}")
+# End of MRI Analysis
 
-        if st.button("Generate Actionable Counterfactuals"):
-            with st.spinner("Calculating diverse counterfactual paths..."):
-                try:
-                    # Generate CFs to move to Non-Demented (0)
-                    cf_result = cf_explainer.generate_counterfactuals(query_data, total_CFs=2, desired_class=0)
-                    cf_df = cf_explainer.get_cf_dataframe(cf_result)
-                    
-                    st.success("Counterfactuals Generated! See how clinical changes could affect the diagnosis:")
-                    st.dataframe(cf_df)
-                    
-                    st.info("**Counterfactual Advice:** The table above shows hypothetical versions of this patient record that would be classified as 'Non Demented'. Compare the differences in features like MMSE, CDR, or brain volumes to understand key risk factors.")
-                except Exception as e:
-                    st.error(f"Counterfactual generation failed: {str(e)}")
-with tab_stats:
-    st.subheader("Model Validation Performance")
-    if metrics_df is not None:
-        st.write("Evolution of model accuracy and loss across federated training rounds.")
-        
-        # Performance Chart
-        chart_data = metrics_df[['round', 'accuracy_pct']].copy()
-        chart_data = chart_data.rename(columns={'accuracy_pct': 'Accuracy (%)', 'round': 'Round'})
-        st.line_chart(chart_data.set_index('Round'))
-        
-        # Metrics Table
-        st.markdown("### Detailed Metrics (Latest Round)")
-        st.table(metrics_df.tail(1)[['round', 'accuracy', 'precision', 'recall', 'f1']])
-        
-        # Confusion Matrix
-        cm_path = "results/accuracy_plot.png" # Using the accuracy plot as it shows the trend
-        if os.path.exists(cm_path):
-            st.image(cm_path, caption="Training Accuracy & Loss Trend", use_container_width=True)
-            
-        cm_img_path = "results/confusion_matrix.png"
-        if os.path.exists(cm_img_path):
-            st.image(cm_img_path, caption="Final Confusion Matrix", use_container_width=True)
-    else:
-        st.warning("No training metrics found in `results/training_metrics.csv`. Run the training scripts first.")
