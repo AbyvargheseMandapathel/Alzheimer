@@ -205,14 +205,12 @@ if uploaded_file is not None:
         st.markdown("---")
         st.subheader("💡 Counterfactual AI Analysis")
         cf_generator = ImageCounterfactual(model, device)
-        cf_map = cf_generator.generate_counterfactual_map(img_t, 0)
-        cf_overlay = overlay_counterfactual(img_np, cf_map)
+        # Target class 0 is 'Non Demented'
+        with st.spinner("Finding minimal changes for healthy diagnosis..."):
+            cf_map = cf_generator.generate_counterfactual_map(img_t, 0, iterations=60)
+            cf_overlay = overlay_counterfactual(img_np, cf_map)
         
-        c_col1, c_col2 = st.columns(2)
-        with c_col1:
-            st.image(cf_overlay, use_container_width=True)
-        with c_col2:
-            st.info("Visualizing the minimal changes needed in the MRI scan to shift the diagnosis to a healthier state.")
+        st.image(cf_overlay, use_container_width=True)
 
 
 # End of MRI Analysis
