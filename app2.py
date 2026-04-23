@@ -176,11 +176,25 @@ if uploaded_file is not None:
             st.image(overlay, use_container_width=True)
             
         # 2. SHAP
-        background = torch.zeros((5, 3, 224, 224)).to(device)
+        # Better background: use "normalized black" instead of raw zeros
+        # This prevents SHAP from being noisy in the black areas of the MRI
+        m_mean = [0.485, 0.456, 0.406]
+        m_std = [0.229, 0.224, 0.225]
+        
+        # Create a background of 10 samples (more samples = smoother results)
+        bg_tensor = torch.zeros((10, 3, 224, 224)).to(device)
+        for i in range(3):
+            bg_tensor[:, i, :, :] = (0 - m_mean[i]) / m_std[i]
+        
         try:
             shap_path = "results/shap_output_legacy.png"
             os.makedirs("results", exist_ok=True)
-            generate_shap_explanation(model, background, img_t, device, save_path=shap_path)
+            generate_shap_explanation(
+                model, bg_tensor, img_t, device, 
+                save_path=shap_path,
+                mean=m_mean,
+                std=m_std
+            )
             with col3:
                 st.subheader("SHAP Attribution")
                 st.image(shap_path, use_container_width=True)

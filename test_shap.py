@@ -10,7 +10,15 @@ device = "cpu"
 model = AlzheimerResNet(num_classes=3).to(device)
 model.eval()
 
+# Setup dummy data with proper normalization
+mean = [0.485, 0.456, 0.406]
+std = [0.229, 0.224, 0.225]
+
+# Normalized black background
 background = torch.zeros((5, 3, 224, 224)).to(device)
+for i in range(3):
+    background[:, i, :, :] = (0 - mean[i]) / std[i]
+
 img_t = torch.rand((1, 3, 224, 224)).to(device)
 
 print("Starting GradientExplainer...")
@@ -20,25 +28,15 @@ shap_results = explainer.shap_values(img_t, ranked_outputs=1)
 
 print("shap_results type:", type(shap_results))
 
-if isinstance(shap_results, tuple):
-    print("shap_results is a tuple of length", len(shap_results))
-    shap_values = shap_results[0]
-    print("tuple[0] type:", type(shap_values))
-    if isinstance(shap_values, list):
-        print("shap_values list length:", len(shap_values))
-        print("shap_values list[0] shape:", shap_values[0].shape)
-    elif hasattr(shap_values, 'shape'):
-        print("shap_values shape:", shap_values.shape)
-else:
-    shap_values = shap_results
-    if isinstance(shap_values, list):
-        print("shap_values list length:", len(shap_values))
-        print("shap_values list[0] shape:", shap_values[0].shape)
-    elif hasattr(shap_values, 'shape'):
-        print("shap_values shape:", shap_values.shape)
-
 try:
-    generate_shap_explanation(model, background, img_t, device, save_path="test_shap_out.png")
+    generate_shap_explanation(
+        model, background, img_t, device, 
+        save_path="test_shap_out.png",
+        mean=mean,
+        std=std
+    )
     print("generate_shap_explanation ran successfully")
 except Exception as e:
     print("Error in generate_shap_explanation:", e)
+    import traceback
+    traceback.print_exc()
