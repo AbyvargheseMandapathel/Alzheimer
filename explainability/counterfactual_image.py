@@ -32,7 +32,6 @@ class ImageCounterfactual:
             target_loss = -torch.log(probs[0, target_class_idx] + 1e-10)
             
             # Loss 2: Minimize perturbation size (L1 for sparsity)
-            # This ensures we find the 'minimal' change needed
             l1_loss = torch.norm(perturbation, p=1) * 0.1
             
             total_loss = target_loss + l1_loss
