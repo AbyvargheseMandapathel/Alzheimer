@@ -2,152 +2,184 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import os
+import copy
 import csv
 import numpy as np
-from tqdm import tqdm
-from sklearn.metrics import (
-    precision_score,
-    recall_score,
-    f1_score,
-    roc_auc_score,
-    confusion_matrix
-)
+from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
 
 from data.dataset import get_dataloaders
 from models.cnn_model import AlzheimerResNet
 
 
-def train_model(data_dir, num_epochs=5, batch_size=32, device="cuda"):
-    print("Initializing Data Loaders...")
-    train_loader, val_loader = get_dataloaders(data_dir, batch_size=batch_size)
+# -------------------------
+# 🔹 Split dataset into clients
+# -------------------------
+def split_clients(dataset, num_clients):
+    size = len(dataset) // num_clients
+    return torch.utils.data.random_split(dataset, [size] * num_clients)
 
-    print(f"Loading Model to {device}...")
-    model = AlzheimerResNet(num_classes=3).to(device)
 
+# -------------------------
+# 🔹 Federated Averaging
+# -------------------------
+def federated_average(models):
+    avg_model = copy.deepcopy(models[0])
+
+    for key in avg_model.state_dict().keys():
+        avg_model.state_dict()[key].data = torch.stack(
+            [m.state_dict()[key].float() for m in models]
+        ).mean(0)
+
+    return avg_model
+
+
+# -------------------------
+# 🔹 Local client training
+# -------------------------
+def train_local(model, loader, device):
+    model.train()
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-4)
+
+    for images, labels in loader:
+        images, labels = images.to(device), labels.to(device)
+
+        optimizer.zero_grad()
+        outputs = model(images)
+        loss = criterion(outputs, labels)
+
+        loss.backward()
+        optimizer.step()
+
+    return model
+
+
+# -------------------------
+# 🔹 Evaluation
+# -------------------------
+def evaluate(model, loader, device):
+    model.eval()
+
+    all_preds, all_labels, all_probs = [], [], []
+
+    with torch.no_grad():
+        for images, labels in loader:
+            images, labels = images.to(device), labels.to(device)
+
+            outputs = model(images)
+            probs = torch.softmax(outputs, dim=1)
+            _, preds = torch.max(outputs, 1)
+
+            all_preds.extend(preds.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+            all_probs.extend(probs.cpu().numpy())
+
+    acc = np.mean(np.array(all_preds) == np.array(all_labels))
+    precision = precision_score(all_labels, all_preds, average="weighted", zero_division=0)
+    recall = recall_score(all_labels, all_preds, average="weighted", zero_division=0)
+    f1 = f1_score(all_labels, all_preds, average="weighted", zero_division=0)
+
+    try:
+        auc = roc_auc_score(all_labels, np.array(all_probs), multi_class="ovr")
+    except:
+        auc = 0.0
+
+    cm = confusion_matrix(all_labels, all_preds)
+
+    return acc, precision, recall, f1, auc, cm
+
+
+# -------------------------
+# 🔥 FEDERATED TRAINING
+# -------------------------
+def federated_training(data_dir, rounds=10, num_clients=3, batch_size=32):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
     os.makedirs("weights", exist_ok=True)
     os.makedirs("results", exist_ok=True)
 
-    # ✅ CSV path updated
-    csv_file = "results/mri_results.csv"
-    file_exists = os.path.isfile(csv_file)
+    # Load data
+    train_loader, val_loader = get_dataloaders(data_dir, batch_size=batch_size)
 
-    with open(csv_file, mode="a", newline="") as f:
+    dataset = train_loader.dataset
+
+    # Split into clients
+    client_sets = split_clients(dataset, num_clients)
+
+    client_loaders = [
+        torch.utils.data.DataLoader(ds, batch_size=batch_size, shuffle=True)
+        for ds in client_sets
+    ]
+
+    # Global model
+    global_model = AlzheimerResNet(num_classes=3).to(device)
+
+    # CSV file
+    csv_path = "results/federated_metrics.csv"
+
+    with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
+        writer.writerow([
+            "accuracy", "precision", "recall",
+            "f1", "auc", "confusion_matrix", "round"
+        ])
 
-        if not file_exists:
+    best_f1 = 0
+
+    # -------------------------
+    # 🔁 Federated rounds
+    # -------------------------
+    for r in range(1, rounds + 1):
+        print(f"\n🌐 Round {r}/{rounds}")
+
+        local_models = []
+
+        # Train each client
+        for i, loader in enumerate(client_loaders):
+            print(f"Client {i+1} training...")
+
+            local_model = copy.deepcopy(global_model)
+            local_model = train_local(local_model, loader, device)
+
+            local_models.append(local_model)
+
+        # Aggregate
+        global_model = federated_average(local_models)
+
+        # Evaluate global model
+        acc, precision, recall, f1, auc, cm = evaluate(global_model, val_loader, device)
+
+        print(f"Global → Acc: {acc:.4f}, F1: {f1:.4f}, AUC: {auc:.4f}")
+
+        # Save metrics
+        with open(csv_path, "a", newline="") as f:
+            writer = csv.writer(f)
             writer.writerow([
-                "epoch", "val_accuracy", "precision", "recall",
-                "f1", "auc", "confusion_matrix"
+                round(acc, 3),
+                round(precision, 3),
+                round(recall, 3),
+                round(f1, 3),
+                round(auc, 3),
+                cm.tolist(),
+                r
             ])
 
-        best_acc = 0.0
+        # Save best model
+        if f1 > best_f1:
+            best_f1 = f1
+            torch.save(global_model.state_dict(), "weights/best_federated_model.pth")
+            print("✅ Saved best global model")
 
-        print("Starting Training...")
-        for epoch in range(num_epochs):
-
-            # ================= TRAIN =================
-            model.train()
-            running_loss = 0.0
-            correct = 0
-            total = 0
-
-            for images, labels in tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Train]"):
-                images, labels = images.to(device), labels.to(device)
-
-                optimizer.zero_grad()
-                outputs = model(images)
-                loss = criterion(outputs, labels)
-
-                loss.backward()
-                optimizer.step()
-
-                running_loss += loss.item()
-                _, predicted = torch.max(outputs, 1)
-                total += labels.size(0)
-                correct += (predicted == labels).sum().item()
-
-            train_acc = 100 * correct / total
-            print(f"Epoch {epoch+1} - Train Loss: {running_loss/len(train_loader):.4f}, Train Acc: {train_acc:.2f}%")
-
-            # ================= VALIDATION =================
-            model.eval()
-            val_loss = 0.0
-            val_correct = 0
-            val_total = 0
-
-            all_preds = []
-            all_labels = []
-            all_probs = []
-
-            with torch.no_grad():
-                for images, labels in tqdm(val_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Val]"):
-                    images, labels = images.to(device), labels.to(device)
-
-                    outputs = model(images)
-                    loss = criterion(outputs, labels)
-
-                    probs = torch.softmax(outputs, dim=1)
-
-                    val_loss += loss.item()
-                    _, predicted = torch.max(outputs, 1)
-
-                    val_total += labels.size(0)
-                    val_correct += (predicted == labels).sum().item()
-
-                    all_preds.extend(predicted.cpu().numpy())
-                    all_labels.extend(labels.cpu().numpy())
-                    all_probs.extend(probs.cpu().numpy())
-
-            val_acc = 100 * val_correct / val_total
-
-            # ================= METRICS =================
-            precision = precision_score(all_labels, all_preds, average="weighted", zero_division=0)
-            recall = recall_score(all_labels, all_preds, average="weighted", zero_division=0)
-            f1 = f1_score(all_labels, all_preds, average="weighted", zero_division=0)
-
-            try:
-                auc = roc_auc_score(all_labels, np.array(all_probs), multi_class="ovr")
-            except:
-                auc = 0.0
-
-            cm = confusion_matrix(all_labels, all_preds)
-
-            print(
-                f"Epoch {epoch+1} - Val Loss: {val_loss/len(val_loader):.4f}, "
-                f"Val Acc: {val_acc:.2f}% | Precision: {precision:.4f} | "
-                f"Recall: {recall:.4f} | F1: {f1:.4f} | AUC: {auc:.4f}"
-            )
-
-            # ================= SAVE TO CSV =================
-            writer.writerow([
-                epoch + 1,
-                val_acc,
-                precision,
-                recall,
-                f1,
-                auc,
-                cm.tolist()
-            ])
-
-            # ================= SAVE BEST MODEL =================
-            if val_acc > best_acc:
-                best_acc = val_acc
-                torch.save(model.state_dict(), "weights/best_centralized_model.pth")
-                print("=> Saved optimal model")
-
-    print(f"Training Complete. Best Val Accuracy: {best_acc:.2f}%")
+    print("\n🎉 Federated Training Complete!")
 
 
+# -------------------------
+# ▶️ RUN
+# -------------------------
 if __name__ == "__main__":
-    dataset_path = "mri/Data"
-    device_to_use = "cuda" if torch.cuda.is_available() else "cpu"
-
-    train_model(
-        data_dir=dataset_path,
-        num_epochs=10,
-        batch_size=32,
-        device=device_to_use
+    federated_training(
+        data_dir="mri/Data",
+        rounds=10,
+        num_clients=3,
+        batch_size=32
     )
