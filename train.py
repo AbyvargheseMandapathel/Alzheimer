@@ -115,7 +115,7 @@ def federated_training(data_dir, rounds=10, num_clients=3, batch_size=32):
     global_model = AlzheimerResNet(num_classes=3).to(device)
 
     # CSV file
-    csv_path = "results/federated_metrics.csv"
+    csv_path = "results/mri_metrics.csv"
 
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
@@ -167,7 +167,7 @@ def federated_training(data_dir, rounds=10, num_clients=3, batch_size=32):
         # Save best model
         if f1 > best_f1:
             best_f1 = f1
-            torch.save(global_model.state_dict(), "weights/best_federated_model.pth")
+            torch.save(global_model.state_dict(), "weights/best_model.pth")
             print("✅ Saved best global model")
 
     print("\n🎉 Federated Training Complete!")
