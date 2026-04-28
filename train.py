@@ -28,9 +28,10 @@ def train_model(data_dir, num_epochs=5, batch_size=32, device="cuda"):
     optimizer = optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-4)
 
     os.makedirs("weights", exist_ok=True)
+    os.makedirs("results", exist_ok=True)
 
-    # CSV setup
-    csv_file = "mri_metrics.csv"
+    # ✅ CSV path updated
+    csv_file = "results/mri_results.csv"
     file_exists = os.path.isfile(csv_file)
 
     with open(csv_file, mode="a", newline="") as f:
@@ -46,6 +47,7 @@ def train_model(data_dir, num_epochs=5, batch_size=32, device="cuda"):
 
         print("Starting Training...")
         for epoch in range(num_epochs):
+
             # ================= TRAIN =================
             model.train()
             running_loss = 0.0
